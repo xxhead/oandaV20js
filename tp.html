@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+
+    <body>
+    <br>
+    <table id='result' style="text-align: center;" class="h2">
+        <tr>
+            <td>TESTNAME </td>
+            <td>STATUS</td>
+        </tr>
+    </table>
+
+    </body>
+
+<script type="text/javascript" src="http://code.jquery.com/jquery-1.4.1.min.js"></script>
+<script type="text/javascript" src="./scripts/oandaV20.js"></script>
+<script type="text/javascript">
+
+
+    var result = $("#result");
+
+    OANDA.baseURL = "https://api-fxtrade.oanda.com"
+    OANDA.auth.enabled = true;
+
+    OANDA.auth.token = "<<token>>";
+	OANDA.accountId="<<v20-accountID>>";
+	
+	var account;
+	var prices;
+	var unit=100;
+	
+
+    function getAccount() {
+        OANDA.account.listSpecific(OANDA.accountId,function(response) {
+             account = response.account;
+			 getPrices();
+        });
+		
+    }
+	function getPrices() {
+        OANDA.rate.quote(OANDA.accountId,['EUR_USD','AUD_USD', 'GBP_USD', 'USD_CHF', 'USD_CAD', 'AUD_CAD','AUD_NZD', 'CAD_CHF', 'EUR_GBP', 'EUR_CHF'], function(response) {
+            prices = response.prices;
+			openbuyordernotnearby(unit);
+        });
+    }
+	
+	function openbuyordernotnearby(unit){
+		for(var i = 0; i<  prices.length; i++){
+			var openorder=true;
+			if(prices[i].asks[0].price-prices[i].bids[0].price>0.0008){
+				continue;
+			}
+			for(var j = 0; j<  account.orders.length; j++){
+				if(typeof(account.orders[j].instrument)!="undefined" && prices[i].instrument==account.orders[j].instrument){
+
+					if(Math.abs(prices[i].asks[0].price-account.orders[j].price)<0.002){
+					openorder=false;
+result.append("<tr><td>"+account.orders[j].instrument+"</td><td id='"+account.orders[j].instrument+"'>"+prices[i].asks[0].price+"#"+account.orders[j].price+"</td></tr>");
+						break;
+					}
+				}
+			}
+			
+			for(var k=0; k<account.trades.length;k++){
+				if(prices[i].instrument==account.trades[k].instrument){
+					if(Math.abs(prices[i].asks[0].price-account.trades[k].price)<0.002){
+					openorder=false;
+result.append("<tr><td>"+account.trades[k].instrument+"</td><td id='"+account.trades[k].instrument+"'>"+prices[i].asks[0].price+"#"+account.trades[k].price+"</td></tr>");
+						break;
+					}
+				}
+			}
+			if(openorder){
+			var marketorder = new Object();
+			var order = new Object();
+			order.units=unit;
+			order.instrument=prices[i].instrument;
+			order.type="MARKET_IF_TOUCHED";
+			order.timeInForce="GTC";
+			order.positionFill="DEFAULT"
+			order.price=prices[i].asks[0].price
+			marketorder.order=order;
+			var takeProfitOnFill = new Object();
+			takeProfitOnFill.timeInForce="GTC";
+			takeProfitOnFill.price=(Number(prices[i].asks[0].price)+0.0015).toFixed(6);
+			order.takeProfitOnFill=takeProfitOnFill;
+			openOrder(OANDA.accountId,marketorder);
+			}
+		}
+			
+	}
+	
+	function openOrder(accountId,order) {
+        OANDA.order.open(accountId, order, function(openMarketOrderResponse) {
+            result.append("<tr><td>"+accountId+"</td><td id='"+accountId+"'>"+order.order.instrument+"#"+order.order.units+"#"+order.order.price+"</td></tr>");
+        });
+    }
+	
+	
+	getAccount();
+	
+    
+</script>
+</html>
